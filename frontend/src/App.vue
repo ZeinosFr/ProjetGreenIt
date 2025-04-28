@@ -15,7 +15,6 @@
           <router-link to="/transactions" class="nav-link">Transactions</router-link>
           <router-link to="/categories" class="nav-link">Categories</router-link>
 
-          <!-- Link only for Admin -->
           <router-link v-if="role === 'Admin'" to="/admin/users" class="manage-users-link">
             Manage Users
           </router-link>
@@ -27,6 +26,19 @@
       </nav>
     </header>
 
+    <!-- Affichage des émissions CO2 -->
+    <section class="co2-tracker">
+      <h3>CO₂ Emission Tracker</h3>
+      <ul>
+        <li v-for="(entry, index) in requests" :key="index">
+          {{ entry.method }} {{ entry.url }} → {{ entry.co2.toFixed(6) }} g CO₂
+        </li>
+      </ul>
+      <p v-if="requests.length">
+        Total CO₂ emitted: <strong>{{ totalCO2.toFixed(6) }}</strong> g
+      </p>
+    </section>
+
     <main>
       <router-view />
     </main>
@@ -36,7 +48,7 @@
 </template>
 
 <script>
-import { baseURL } from '@/config'
+import { baseURL } from '@/config';
 import Footer from './components/Footer.vue';
 import axios from 'axios';
 
@@ -50,8 +62,14 @@ export default {
       isAuthenticated: localStorage.getItem('token') !== null,
       username: '',
       role: '',
-      logoutMessage: ''
+      logoutMessage: '',
+      requests: [] // liste de toutes les requêtes capturées
     };
+  },
+  computed: {
+    totalCO2() {
+      return this.requests.reduce((sum, r) => sum + r.co2, 0);
+    }
   },
   methods: {
     async fetchUserDetails() {
@@ -87,7 +105,7 @@ export default {
       } else {
         this.$router.push('/auth');
       }
-    },
+    }
   },
   watch: {
     '$route'() {
@@ -98,13 +116,30 @@ export default {
         this.username = '';
         this.role = '';
       }
-    },
+    }
   },
   created() {
     if (this.isAuthenticated) {
       this.fetchUserDetails();
     }
-  },
+
+    // Intercepteur global pour calculer CO2 pour chaque réponse API
+    axios.interceptors.response.use(response => {
+      const contentLength = response.headers['content-length'] || 0;
+      const sizeInKB = contentLength / 1024;
+      const estimatedCO2 = sizeInKB * 0.00176;
+
+      this.requests.push({
+        url: response.config.url,
+        method: response.config.method.toUpperCase(),
+        co2: estimatedCO2
+      });
+
+      return response;
+    }, error => {
+      return Promise.reject(error);
+    });
+  }
 };
 </script>
 
@@ -185,7 +220,6 @@ nav {
   transform: translateY(-2px);
 }
 
-
 .auth-btn {
   padding: 0.8em 1.5em;
   background-color: transparent;
@@ -218,4 +252,34 @@ main {
   flex-grow: 1;
 }
 
+/* CO2 tracker style */
+.co2-tracker {
+  background-color: #eaf6f6;
+  padding: 1rem;
+  margin: 1rem;
+  border-radius: 8px;
+  font-family: 'Arial', sans-serif;
+  box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+}
+
+.co2-tracker h3 {
+  margin-bottom: 0.5em;
+  color: #2d3436;
+}
+
+.co2-tracker ul {
+  padding-left: 1.2em;
+}
+
+.co2-tracker li {
+  margin-bottom: 0.4em;
+  font-size: 1rem;
+  color: #34495e;
+}
+
+.co2-tracker p {
+  margin-top: 1em;
+  font-weight: bold;
+  color: #27ae60;
+}
 </style>
